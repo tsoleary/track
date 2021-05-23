@@ -1,5 +1,7 @@
 # Track & Field data
 
+Andrea Allen, Mahalia Clark, Alison Hall, & Thomas O'Leary
+
 ## World Record Progression
 
 - [Exploring different visualizations](https://tsoleary.github.io/track/world_record_progression/athletics_world_record_progression.html) for the world record progression for a few Athletics events.
