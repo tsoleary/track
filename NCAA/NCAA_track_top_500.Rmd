@@ -1,0 +1,150 @@
+---
+title: "NCAA top 500 in each event from 2010 to 2021"
+author: "TS O'Leary"
+date: "December 21, 2021"
+output:
+  rmarkdown::html_document:
+    theme: sandstone
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include = FALSE}
+# don't show cose, warnings or messages
+knitr::opts_chunk$set(echo = FALSE, 
+                      warning = FALSE, 
+                      message = FALSE)
+
+# Load packages
+require(tidyverse)
+
+# Load data
+df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
+  mutate(EVENT_TYPE = case_when(!is.na(TIME_S) ~ "TRACK",
+                                !is.na(MARK_METERS) ~ "FIELD",
+                                !is.na(POINTS) ~ "MULTI"))
+```
+
+# Questions to answer with this data
+
+- Fastest versus very fast -- rich get richer... top 500 versus top 50, top 8
+- UVM versus country
+- Which events are getting better or staying the same?
+- Are women or men improving faster?
+- Power conferences versus the country
+- Distribution of class year men versus women? over time and event -- are some events younger. are women or men younger?
+- which have lopsided year distribution, 5th year transfers versus improvements
+
+
+- team with the most 1st, top 8's 500's etc
+
+
+
+
+```{r}
+# Function for plotting
+stat_box_data <- function(dat) {
+  y_val = max(dat$TIME_M)
+  return( 
+    data.frame(
+      y = y_val,
+      label = paste(length(dat))
+    )
+  )
+}
+```
+
+
+```{r}
+df %>%
+  filter(EVENT == "Long Jump" & SEX == "Men") %>%
+  ggplot(aes(x = YEAR_QUAL, y = MARK_METERS)) +
+  geom_violin(fill = "azure2", color = "grey40") +
+  geom_boxplot(fill = "azure2", color = "grey40", width = 0.2) +
+  theme_classic()
+```
+
+
+```{r}
+x <- df %>%
+  filter(EVENT_TYPE == "TRACK") %>%
+  group_by(EVENT, SEX) %>%
+  group_split()
+
+for (i in 1:length(x)) {
+  p <- x[[i]] %>%
+    ggplot(aes(x = YEAR_QUAL, y = TIME_M)) +
+    geom_violin(fill = "azure2", color = "grey40") +
+    geom_boxplot(fill = "azure2", color = "grey40", width = 0.2) +
+    stat_summary(fun.data = stat_box_data, 
+                 hjust = 0.5,
+                 vjust = 0.9,
+                 geom = "text") +
+    labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
+    theme_classic()
+  
+  x[[i]] %>%
+  ggplot(aes(x = desc(TIME_M), y = desc(YEAR_QUAL), group = YEAR_QUAL)) + 
+  ggridges::geom_density_ridges()
+
+  
+  print(p)
+}
+```
+
+```{r}
+df_uvm <- df %>% 
+  filter(TEAM == "Vermont")
+
+df_uvm %>%
+  group_by(EVENT) %>%
+  count() %>%
+  arrange(desc(n))
+
+df_uvm %>%
+  group_by(YEAR_QUAL) %>%
+  count() %>%
+  arrange(desc(n))
+
+df_uvm %>%
+  group_by(EVENT, YEAR_QUAL) %>%
+  count() %>%
+  arrange(desc(n))
+
+df_uvm %>%
+  filter(EVENT == "Javelin" & YEAR_QUAL == 2011)
+```
+
+```{r}
+
+df_uvm <- df_uvm %>%
+  filter(EVENT == "800m", SEX == "Women")
+
+ggplot() +
+  geom_violin(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
+              fill = "azure2", color = "grey40") +
+  geom_boxplot(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
+               fill = "azure2", color = "grey40", width = 0.2) +
+  geom_smooth(data = x[[i]], aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
+              method = lm, 
+              se = FALSE,
+              formula = y ~ x, 
+              color = "grey50") +
+    geom_smooth(data = df_uvm, aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
+              method = lm, 
+              se = FALSE,
+              formula = y ~ x, 
+              color = "darkgreen") +
+  geom_jitter(data = df_uvm, 
+              width = 0.1,
+             aes(x = YEAR_QUAL, y = TIME_M),
+             alpha = 0.9,
+             size = 2, 
+             shape = 21, 
+             stroke = 1,
+             color = "darkgreen", 
+             fill = "gold") +
+  labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
+  theme_classic()
+```
+
