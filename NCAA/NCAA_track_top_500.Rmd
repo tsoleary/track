@@ -7,6 +7,7 @@ output:
     theme: sandstone
     toc: true
     toc_float: true
+runtime: shiny
 ---
 
 ```{r setup, include = FALSE}
@@ -17,12 +18,49 @@ knitr::opts_chunk$set(echo = FALSE,
 
 # Load packages
 require(tidyverse)
+#library(shiny)
+#library(shinyThings)
+
+shinyThings::radioSwitchButtons_default_style(selected_background = "#faa555")
 
 # Load data
 df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
   mutate(EVENT_TYPE = case_when(!is.na(TIME_S) ~ "TRACK",
                                 !is.na(MARK_METERS) ~ "FIELD",
                                 !is.na(POINTS) ~ "MULTI"))
+
+# Load functions ----
+# Function: violin_box_plot -----
+# Description: Creates a violin box plot
+# Inputs: input_description
+# Outputs: output_description
+
+# Required packages
+require(tidyverse)
+
+# Example call
+# df %>%
+#   filter(EVENT == "Long Jump" & SEX == "Men") %>%
+#   violin_box_plot(y = "MARK_METERS", y_lab = "Meters")
+
+
+violin_box_plot <- function(dat, 
+                            y,
+                            x_lab = "", 
+                            y_lab = y) {
+  ggplot(dat,
+         aes_string(x = "YEAR_QUAL", 
+                    y = y)) +
+    geom_violin(fill = "azure2", 
+                color = "grey40") +
+    geom_boxplot(fill = "azure2", 
+                 color = "grey40", 
+                 width = 0.2) +
+    labs(x = x_lab, y = y_lab,
+         title = paste0(unique(dat$SEX), "'s ", unique(dat$EVENT))) +
+    theme_classic(base_size = 16)
+} ## End function -----
+
 ```
 
 # Questions to answer with this data
@@ -39,112 +77,134 @@ df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
 - team with the most 1st, top 8's 500's etc
 
 
+# Data 
 
 
-```{r}
-# Function for plotting
-stat_box_data <- function(dat) {
-  y_val = max(dat$TIME_M)
-  return( 
-    data.frame(
-      y = y_val,
-      label = paste(length(dat))
-    )
+```{r shiny}
+shinyApp(
+
+ui <- fluidPage(
+  
+  titlePanel("Test"),
+  
+  sidebarLayout(
+    sidebarPanel(width = 3,
+      # Choose the Event
+      selectInput(
+        "event", 
+        label = "Event",
+        choices = unique(df$EVENT), 
+        selected = "800m"),
+      
+      # Choose sex
+      # selectInput(
+      #   "sex", 
+      #   label = "Event",
+      #   choices = c("Men", "Women"), 
+      #   selected = "Women"),
+      # 
+      # Choose range of ranks to plot
+      shinyThings::radioSwitchButtons(
+            inputId = "sex",
+            choices = c("Men" = "Men", "Women" = "Women"),
+            selected = "Women")
+    ),
+    
+    # Plot  
+    mainPanel(width = 9,
+              plotOutput(outputId = "plot"))
   )
-}
+
+  
+),
+
+
+# shinyThings::buttonGroup("input-id", choices = letters[1:3])
+# shinyThings::radioSwitchButtons("input-id", choices = letters[1:5])
+
+server <- function(input, output, session) {
+  # Filter data based on inputs
+  data <- reactive({
+    df %>% 
+      filter(EVENT == input$event & SEX == input$sex)
+    })
+  
+  # Plot
+  output$plot <- renderPlot({
+    temp <- data() 
+    temp %>%
+      violin_box_plot(y = "TIME_S", 
+                      y_lab = "Time")
+    })
+},
+  options = list(height = 1000)
+)
+  
+# Create Shiny app -------------------------------------------------------------
+#shinyApp(ui = ui, server = server)
 ```
 
 
-```{r}
-df %>%
-  filter(EVENT == "Long Jump" & SEX == "Men") %>%
-  ggplot(aes(x = YEAR_QUAL, y = MARK_METERS)) +
-  geom_violin(fill = "azure2", color = "grey40") +
-  geom_boxplot(fill = "azure2", color = "grey40", width = 0.2) +
-  theme_classic()
-```
-
-
-```{r}
-x <- df %>%
+```{r, eval = FALSE}
+df_track <- df %>%
   filter(EVENT_TYPE == "TRACK") %>%
   group_by(EVENT, SEX) %>%
   group_split()
 
-for (i in 1:length(x)) {
-  p <- x[[i]] %>%
-    ggplot(aes(x = YEAR_QUAL, y = TIME_M)) +
-    geom_violin(fill = "azure2", color = "grey40") +
-    geom_boxplot(fill = "azure2", color = "grey40", width = 0.2) +
-    stat_summary(fun.data = stat_box_data, 
-                 hjust = 0.5,
-                 vjust = 0.9,
-                 geom = "text") +
-    labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
-    theme_classic()
-  
-  x[[i]] %>%
-  ggplot(aes(x = desc(TIME_M), y = desc(YEAR_QUAL), group = YEAR_QUAL)) + 
-  ggridges::geom_density_ridges()
+sprints <- unique(df$EVENT)[c(1:3, 9:12)]
 
+for (i in 1:length(df_track)) {
+  # Loop through each 
+  p <- df_track[[i]] %>%
+    violin_box_plot(y = "TIME_S", 
+                    y_lab = "Time")
   
-  print(p)
+  if (unique(df_track[[i]]$EVENT) %in% sprints) {
+    p <- p + 
+      scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
+    print(p)
+  } else {
+    p <- p +
+      scale_y_time(labels = function(l) strftime(l, '%M:%S'))
+    print(p)
+  }
 }
 ```
+
+
+# University of Vermont
 
 ```{r}
 df_uvm <- df %>% 
   filter(TEAM == "Vermont")
-
-df_uvm %>%
-  group_by(EVENT) %>%
-  count() %>%
-  arrange(desc(n))
-
-df_uvm %>%
-  group_by(YEAR_QUAL) %>%
-  count() %>%
-  arrange(desc(n))
-
-df_uvm %>%
-  group_by(EVENT, YEAR_QUAL) %>%
-  count() %>%
-  arrange(desc(n))
-
-df_uvm %>%
-  filter(EVENT == "Javelin" & YEAR_QUAL == 2011)
 ```
 
 ```{r}
-
-df_uvm <- df_uvm %>%
-  filter(EVENT == "800m", SEX == "Women")
-
-ggplot() +
-  geom_violin(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
-              fill = "azure2", color = "grey40") +
-  geom_boxplot(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
-               fill = "azure2", color = "grey40", width = 0.2) +
-  geom_smooth(data = x[[i]], aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
-              method = lm, 
-              se = FALSE,
-              formula = y ~ x, 
-              color = "grey50") +
-    geom_smooth(data = df_uvm, aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
-              method = lm, 
-              se = FALSE,
-              formula = y ~ x, 
-              color = "darkgreen") +
-  geom_jitter(data = df_uvm, 
-              width = 0.1,
-             aes(x = YEAR_QUAL, y = TIME_M),
-             alpha = 0.9,
-             size = 2, 
-             shape = 21, 
-             stroke = 1,
-             color = "darkgreen", 
-             fill = "gold") +
-  labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
-  theme_classic()
+# ggplot() +
+#   geom_violin(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
+#               fill = "azure2", color = "grey40") +
+#   geom_boxplot(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
+#                fill = "azure2", color = "grey40", width = 0.2) +
+#   geom_smooth(data = x[[i]], aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
+#               method = lm, 
+#               se = FALSE,
+#               formula = y ~ x, 
+#               color = "grey50") +
+#     geom_smooth(data = df_uvm, aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
+#               method = lm, 
+#               se = FALSE,
+#               formula = y ~ x, 
+#               color = "darkgreen") +
+#   geom_jitter(data = df_uvm, 
+#               width = 0.1,
+#              aes(x = YEAR_QUAL, y = TIME_M),
+#              alpha = 0.9,
+#              size = 2, 
+#              shape = 21, 
+#              stroke = 1,
+#              color = "darkgreen", 
+#              fill = "gold") +
+#   labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
+#   theme_classic()
 ```
 
