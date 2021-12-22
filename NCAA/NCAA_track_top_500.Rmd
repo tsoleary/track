@@ -24,7 +24,7 @@ require(tidyverse)
 shinyThings::radioSwitchButtons_default_style(selected_background = "#faa555")
 
 # Load data
-df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
+df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
   mutate(EVENT_TYPE = case_when(!is.na(TIME_S) ~ "TRACK",
                                 !is.na(MARK_METERS) ~ "FIELD",
                                 !is.na(POINTS) ~ "MULTI"))
