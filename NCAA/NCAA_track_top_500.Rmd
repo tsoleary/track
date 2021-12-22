@@ -1,12 +1,12 @@
 ---
-title: "NCAA top 500 in each event from 2010 to 2021"
+title: "NCAA top athletes in each event from 2010 to 2021"
 author: "TS O'Leary"
 date: "December 21, 2021"
 output:
   rmarkdown::html_document:
     theme: sandstone
-    toc: true
-    toc_float: true
+    toc: false
+    toc_float: false
 runtime: shiny
 ---
 
@@ -29,7 +29,11 @@ df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
                                 !is.na(MARK_METERS) ~ "FIELD",
                                 !is.na(POINTS) ~ "MULTI"))
 
-# Load functions ----
+
+# Define sprint events for plotting
+sprints <- unique(df$EVENT)[c(1:3, 9:12)]
+
+# Define functions ----
 # Function: violin_box_plot -----
 # Description: Creates a violin box plot
 # Inputs: input_description
@@ -63,120 +67,133 @@ violin_box_plot <- function(dat,
 
 ```
 
-# Questions to answer with this data
+<!-- # Questions to answer with this data -->
 
-- Fastest versus very fast -- rich get richer... top 500 versus top 50, top 8
-- UVM versus country
-- Which events are getting better or staying the same?
-- Are women or men improving faster?
-- Power conferences versus the country
-- Distribution of class year men versus women? over time and event -- are some events younger. are women or men younger?
-- which have lopsided year distribution, 5th year transfers versus improvements
-
-
-- team with the most 1st, top 8's 500's etc
+<!-- - Fastest versus very fast -- rich get richer... top 500 versus top 50, top 8 -->
+<!-- - UVM versus country -->
+<!-- - Which events are getting better or staying the same? -->
+<!-- - Are women or men improving faster? -->
+<!-- - Power conferences versus the country -->
+<!-- - Distribution of class year men versus women? over time and event -- are some events younger. are women or men younger? -->
+<!-- - which have lopsided year distribution, 5th year transfers versus improvements -->
 
 
-# Data 
+<!-- - team with the most 1st, top 8's 500's etc -->
 
 
 ```{r shiny}
 shinyApp(
-
-ui <- fluidPage(
   
-  titlePanel("Test"),
-  
-  sidebarLayout(
-    sidebarPanel(width = 3,
-      # Choose the Event
-      selectInput(
-        "event", 
-        label = "Event",
-        choices = unique(df$EVENT), 
-        selected = "800m"),
-      
-      # Choose sex
-      # selectInput(
-      #   "sex", 
-      #   label = "Event",
-      #   choices = c("Men", "Women"), 
-      #   selected = "Women"),
-      # 
-      # Choose range of ranks to plot
-      shinyThings::radioSwitchButtons(
-            inputId = "sex",
-            choices = c("Men" = "Men", "Women" = "Women"),
-            selected = "Women")
-    ),
+  # Define the user interface
+  ui <- fluidPage(
     
-    # Plot  
-    mainPanel(width = 9,
-              plotOutput(outputId = "plot"))
-  )
+    # titlePanel("Test"),
+    
+    sidebarLayout(
+      
+      sidebarPanel(width = 3,
+        # Choose the Event
+        selectInput(
+          inputId = "event", 
+          label = "Event",
+          choices = c(unique(df$EVENT)[1:21], "Multi"), 
+          selected = "800m"
+          ),
+        
+        # Choose Sex
+        shinyThings::radioSwitchButtons(
+          inputId = "sex",
+          choices = c("Men" = "Men", "Women" = "Women"),
+          selected = "Women"
+          ),
 
+        # Choose rank
+        sliderInput(
+          inputId = "rank",
+          label = "Top # Athletes",
+          min = 0,
+          max = 500,
+          value = 100,
+          step = 10,
+          ),
+        
+        ),
+      
+      # Plot  
+      mainPanel(width = 9,
+                plotOutput(outputId = "plot"))
+    )
+  ),
   
-),
-
-
-# shinyThings::buttonGroup("input-id", choices = letters[1:3])
-# shinyThings::radioSwitchButtons("input-id", choices = letters[1:5])
-
-server <- function(input, output, session) {
-  # Filter data based on inputs
-  data <- reactive({
-    df %>% 
-      filter(EVENT == input$event & SEX == input$sex)
-    })
   
-  # Plot
-  output$plot <- renderPlot({
-    temp <- data() 
-    temp %>%
-      violin_box_plot(y = "TIME_S", 
-                      y_lab = "Time")
-    })
-},
+  # Define the server
+  server <- function(input, output, session) {
+    # Filter data based on inputs
+    data <- reactive({
+      if (input$event == "Multi") {
+        if (input$sex == "Men") {
+          temp <- df %>% 
+            filter(EVENT == "Decathlon" & SEX == input$sex) %>% 
+            filter(RANK <= input$rank)
+        } else {
+          temp <- df %>% 
+            filter(EVENT == "Heptathlon" & SEX == input$sex) %>% 
+            filter(RANK <= input$rank)
+        }
+      } else {
+          temp <- df %>% 
+            filter(EVENT == input$event & SEX == input$sex) %>% 
+            filter(RANK <= input$rank)
+      }
+      
+      temp
+
+      })
+    
+    # Plot
+    output$plot <- renderPlot({
+      temp <- data() 
+      
+      if (unique(temp$EVENT_TYPE) == "TRACK") {
+        if (unique(temp$EVENT) %in% sprints) {
+          p <- temp %>%
+            violin_box_plot(y = "TIME_S", 
+                            y_lab = "Time (sec)")  + 
+            scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
+        } else {
+          p <- temp %>%
+            violin_box_plot(y = "TIME_S", 
+                            y_lab = "Time (min:sec)") +
+            scale_y_time(labels = function(l) strftime(l, '%M:%S'))
+        }
+
+      } else if (unique(temp$EVENT_TYPE) == "FIELD") {
+          p <- temp %>%
+            violin_box_plot(y = "MARK_METERS", 
+                            y_lab = "Mark (m)") + 
+            scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
+        
+      } else {
+          p <- temp %>%
+            violin_box_plot(y = "POINTS", 
+                            y_lab = "Points")
+        
+      }
+      
+      p
+      
+
+      })
+  },
+
+  # Set height for output of panel in html
   options = list(height = 1000)
 )
-  
-# Create Shiny app -------------------------------------------------------------
-#shinyApp(ui = ui, server = server)
 ```
-
-
-```{r, eval = FALSE}
-df_track <- df %>%
-  filter(EVENT_TYPE == "TRACK") %>%
-  group_by(EVENT, SEX) %>%
-  group_split()
-
-sprints <- unique(df$EVENT)[c(1:3, 9:12)]
-
-for (i in 1:length(df_track)) {
-  # Loop through each 
-  p <- df_track[[i]] %>%
-    violin_box_plot(y = "TIME_S", 
-                    y_lab = "Time")
-  
-  if (unique(df_track[[i]]$EVENT) %in% sprints) {
-    p <- p + 
-      scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
-    print(p)
-  } else {
-    p <- p +
-      scale_y_time(labels = function(l) strftime(l, '%M:%S'))
-    print(p)
-  }
-}
-```
-
-
-# University of Vermont
 
 ```{r}
-df_uvm <- df %>% 
-  filter(TEAM == "Vermont")
+# df_uvm <- df %>% 
+#   filter(TEAM == "Vermont")
 ```
 
 ```{r}
