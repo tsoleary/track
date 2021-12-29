@@ -1,7 +1,6 @@
 ---
 title: "NCAA top athletes in each event from 2010 to 2021"
 author: "TS O'Leary"
-date: "December 21, 2021"
 output:
   rmarkdown::html_document:
     theme: sandstone
@@ -18,16 +17,21 @@ knitr::opts_chunk$set(echo = FALSE,
 
 # Load packages
 require(tidyverse)
-#library(shiny)
-#library(shinyThings)
+require(shiny)
+require(broom)
 
 shinyThings::radioSwitchButtons_default_style(selected_background = "#faa555")
 
 # Load data
-df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
-  mutate(EVENT_TYPE = case_when(!is.na(TIME_S) ~ "TRACK",
-                                !is.na(MARK_METERS) ~ "FIELD",
-                                !is.na(POINTS) ~ "MULTI"))
+df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
+
+# Create split data by event type -- TRACK, FIELD, MULTI -- for analysis
+df_split <- df %>%
+  group_by(EVENT_TYPE) %>%
+  group_split()
+
+# Colors for plotting teams
+df_colors <- read_csv("https://raw.githubusercontent.com/tsoleary/track/main/NCAA/data/ncaa_colors.csv")
 
 
 # Define sprint events for plotting
@@ -92,6 +96,7 @@ shinyApp(
     sidebarLayout(
       
       sidebarPanel(width = 3,
+        
         # Choose the Event
         selectInput(
           inputId = "event", 
@@ -117,6 +122,15 @@ shinyApp(
           step = 10,
           ),
         
+        # Choose team(s) to add to plot
+        selectInput(
+          inputId = "teams", 
+          label = "Teams",
+          choices = unique(df$ncaa_name), 
+          multiple = TRUE,
+          selected = NULL
+          ),
+        
         ),
       
       # Plot  
@@ -128,6 +142,8 @@ shinyApp(
   
   # Define the server
   server <- function(input, output, session) {
+    
+    
     # Filter data based on inputs
     data <- reactive({
       if (input$event == "Multi") {
@@ -144,6 +160,37 @@ shinyApp(
           temp <- df %>% 
             filter(EVENT == input$event & SEX == input$sex) %>% 
             filter(RANK <= input$rank)
+      }
+      
+      temp
+
+      })
+    
+    # Filter data based on inputs
+    data_team <- reactive({
+      dat <- data()
+      
+      if (length(input$teams > 0)) {
+        temp <- dat %>%
+          filter(ncaa_name %in% input$teams)
+      } else {
+        temp <- NULL
+      }
+      
+      temp
+
+      })
+    
+        # Filter data based on inputs
+    data_team_cols <- reactive({
+      
+      if (length(input$teams > 0)) {
+        temp <- df_colors %>%
+          filter(ncaa_name %in% input$teams) %>%
+        group_by(ncaa_name) %>%
+        group_split()
+      } else {
+        temp <- NULL
       }
       
       temp
@@ -180,6 +227,83 @@ shinyApp(
         
       }
       
+      
+      if (length(input$teams) > 0) {
+        # Define reactive input
+        dat <- data_team()
+        cols <- data_team_cols()
+        
+        # Split data into a list of teams
+        dat <- dat %>%
+          group_by(ncaa_name) %>%
+          group_split()
+        
+              if (unique(temp$EVENT_TYPE) == "TRACK") {
+        if (unique(temp$EVENT) %in% sprints) {
+          for (i in 1:length(input$teams)) {
+            p <- p +
+               geom_jitter(data = dat[[i]], 
+                           width = 0.1,
+                           aes(x = YEAR_QUAL, 
+                               y = TIME_S),
+                           alpha = 0.9,
+                           size = 2.5, 
+                           shape = 21, 
+                           stroke = 1,
+                           fill = cols[[i]]$primary_color[1],
+                           color = cols[[i]]$secondary_color[1])
+          }
+        } else {
+          for (i in 1:length(input$teams)) {
+            p <- p +
+               geom_jitter(data = dat[[i]], 
+                           width = 0.1,
+                           aes(x = YEAR_QUAL, 
+                               y = TIME_S),
+                           alpha = 0.9,
+                           size = 2.5, 
+                           shape = 21, 
+                           stroke = 1,
+                           fill = cols[[i]]$primary_color[1],
+                           color = cols[[i]]$secondary_color[1])
+          }
+        }
+
+      } else if (unique(temp$EVENT_TYPE) == "FIELD") {
+          for (i in 1:length(input$teams)) {
+            p <- p +
+               geom_jitter(data = dat[[i]], 
+                           width = 0.1,
+                           aes(x = YEAR_QUAL, 
+                               y = MARK_METERS),
+                           alpha = 0.9,
+                           size = 2.5, 
+                           shape = 21, 
+                           stroke = 1,
+                           fill = cols[[i]]$primary_color[1],
+                           color = cols[[i]]$secondary_color[1])
+          }
+        
+      } else {
+          for (i in 1:length(input$teams)) {
+            p <- p +
+               geom_jitter(data = dat[[i]], 
+                           width = 0.1,
+                           aes(x = YEAR_QUAL, 
+                               y = POINTS),
+                           alpha = 0.9,
+                           size = 2.5, 
+                           shape = 21, 
+                           stroke = 1,
+                           fill = cols[[i]]$primary_color[1],
+                           color = cols[[i]]$secondary_color[1])
+          }
+        
+      }
+        
+        
+      }
+      
       p
       
 
@@ -189,11 +313,6 @@ shinyApp(
   # Set height for output of panel in html
   options = list(height = 1000)
 )
-```
-
-```{r}
-# df_uvm <- df %>% 
-#   filter(TEAM == "Vermont")
 ```
 
 ```{r}
@@ -223,5 +342,69 @@ shinyApp(
 #              fill = "gold") +
 #   labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
 #   theme_classic()
+```
+
+<!-- # Regression on the data -->
+
+```{r, eval = FALSE}
+# Run linear regressions
+
+# Define top number of athletes
+top_n_ath <- 8
+
+# Field events -- linear regression
+df_field_lm <- df_split[[1]] %>%
+  group_by(EVENT, SEX, YEAR_QUAL) %>%
+  slice_min(order_by = RANK,
+            n = top_n_ath) %>%
+  ungroup(YEAR_QUAL) %>%
+  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ lm(MARK_METERS ~ YEAR_QUAL, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance)
+  ) %>%
+  unnest(tidied)
+
+# Multi events -- linear regression
+df_multi_lm <- df_split[[2]] %>%
+  group_by(EVENT, SEX, YEAR_QUAL) %>%
+  slice_min(order_by = RANK,
+            n = top_n_ath) %>%
+  ungroup(YEAR_QUAL) %>%
+  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ lm(POINTS ~ YEAR_QUAL, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance)
+  ) %>%
+  unnest(tidied)
+
+# Track events -- linear regression
+df_track_lm <- df_split[[3]] %>%
+  group_by(EVENT, SEX, YEAR_QUAL) %>%
+  slice_min(order_by = RANK,
+            n = top_n_ath) %>%
+  ungroup(YEAR_QUAL) %>%
+  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+  nest() %>%
+  mutate(
+    fit = map(data, ~ lm(TIME_S ~ YEAR_QUAL, data = .x)),
+    tidied = map(fit, tidy),
+    glanced = map(fit, glance)
+  ) %>%
+  unnest(tidied)
+
+# Bind all back to a single data frame
+df_lm <- bind_rows(df_track_lm, df_field_lm, df_multi_lm)
+  
+x <- df_lm %>% 
+  filter(term == "YEAR_QUAL") %>% 
+  filter(p.value < 0.05/84)
+
+x
+
 ```
 
