@@ -172,7 +172,9 @@ shinyApp(
       
       if (length(input$teams > 0)) {
         temp <- dat %>%
-          filter(ncaa_name %in% input$teams)
+          filter(ncaa_name %in% input$teams) %>%
+          group_by(ncaa_name) %>%
+          group_split()
       } else {
         temp <- NULL
       }
@@ -181,21 +183,21 @@ shinyApp(
 
       })
     
-        # Filter data based on inputs
-    data_team_cols <- reactive({
-      
-      if (length(input$teams > 0)) {
-        temp <- df_colors %>%
-          filter(ncaa_name %in% input$teams) %>%
-        group_by(ncaa_name) %>%
-        group_split()
-      } else {
-        temp <- NULL
-      }
-      
-      temp
-
-      })
+    #     # Filter data based on inputs
+    # data_team_cols <- reactive({
+    #   
+    #   if (length(input$teams > 0)) {
+    #     temp <- df_colors %>%
+    #       filter(ncaa_name %in% input$teams) #%>%
+    #     # group_by(ncaa_name) %>%
+    #     # group_split()
+    #   } else {
+    #     temp <- NULL
+    #   }
+    #   
+    #   temp
+    # 
+    #   })
     
     # Plot
     output$plot <- renderPlot({
@@ -227,20 +229,18 @@ shinyApp(
         
       }
       
+      # Define teams
+      dat <- data_team()
       
-      if (length(input$teams) > 0) {
-        # Define reactive input
-        dat <- data_team()
-        cols <- data_team_cols()
+      if (length(dat) > 0) {
         
-        # Split data into a list of teams
-        dat <- dat %>%
-          group_by(ncaa_name) %>%
-          group_split()
+        # Define colors for plotting
+        cols <- df_colors %>%
+          filter(ncaa_name %in% input$teams)
         
-              if (unique(temp$EVENT_TYPE) == "TRACK") {
+      if (unique(temp$EVENT_TYPE) == "TRACK") {
         if (unique(temp$EVENT) %in% sprints) {
-          for (i in 1:length(input$teams)) {
+          for (i in 1:length(dat)) {
             p <- p +
                geom_jitter(data = dat[[i]], 
                            width = 0.1,
@@ -250,11 +250,15 @@ shinyApp(
                            size = 2.5, 
                            shape = 21, 
                            stroke = 1,
-                           fill = cols[[i]]$primary_color[1],
-                           color = cols[[i]]$secondary_color[1])
+                           fill = as.character(cols[cols$ncaa_name == 
+                                         unique(dat[[i]]$ncaa_name),
+                                       "primary_color"]),
+                           color = as.character(cols[cols$ncaa_name == 
+                                          unique(dat[[i]]$ncaa_name),
+                                        "secondary_color"]))
           }
         } else {
-          for (i in 1:length(input$teams)) {
+          for (i in 1:length(dat)) {
             p <- p +
                geom_jitter(data = dat[[i]], 
                            width = 0.1,
@@ -264,13 +268,17 @@ shinyApp(
                            size = 2.5, 
                            shape = 21, 
                            stroke = 1,
-                           fill = cols[[i]]$primary_color[1],
-                           color = cols[[i]]$secondary_color[1])
+                           fill = as.character(cols[cols$ncaa_name == 
+                                         unique(dat[[i]]$ncaa_name),
+                                       "primary_color"]),
+                           color = as.character(cols[cols$ncaa_name == 
+                                         unique(dat[[i]]$ncaa_name),
+                                       "secondary_color"]))
           }
         }
 
       } else if (unique(temp$EVENT_TYPE) == "FIELD") {
-          for (i in 1:length(input$teams)) {
+          for (i in 1:length(dat)) {
             p <- p +
                geom_jitter(data = dat[[i]], 
                            width = 0.1,
@@ -280,8 +288,12 @@ shinyApp(
                            size = 2.5, 
                            shape = 21, 
                            stroke = 1,
-                           fill = cols[[i]]$primary_color[1],
-                           color = cols[[i]]$secondary_color[1])
+                           fill = as.character(cols[cols$ncaa_name == 
+                                         unique(dat[[i]]$ncaa_name),
+                                       "primary_color"]),
+                           color = as.character(cols[cols$ncaa_name == 
+                                          unique(dat[[i]]$ncaa_name),
+                                        "secondary_color"]))
           }
         
       } else {
@@ -295,8 +307,12 @@ shinyApp(
                            size = 2.5, 
                            shape = 21, 
                            stroke = 1,
-                           fill = cols[[i]]$primary_color[1],
-                           color = cols[[i]]$secondary_color[1])
+                           fill = as.character(cols[cols$ncaa_name == 
+                                         unique(dat[[i]]$ncaa_name),
+                                       "primary_color"]),
+                           color = as.character(cols[cols$ncaa_name == 
+                                          unique(dat[[i]]$ncaa_name),
+                                        "secondary_color"]))
           }
         
       }
