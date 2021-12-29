@@ -96,3 +96,58 @@ df <- df %>%
 
 # Save as .rds
 saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds"))
+
+# Clean team names -------------------------------------------------------------
+
+# Load data
+df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds")) %>%
+  mutate(EVENT_TYPE = case_when(!is.na(TIME_S) ~ "TRACK",
+                                !is.na(MARK_METERS) ~ "FIELD",
+                                !is.na(POINTS) ~ "MULTI"))
+
+# Define list of unique NCAA team names for ncaahoopsR
+ncaa_colors <- ncaahoopR::ncaa_colors %>%
+  add_row(ncaa_name = "non")
+
+# With the help of fuzzy matching 
+# Load library
+require("fuzzyjoin")
+z <- stringdist_join(ncaa_colors,
+                     track,
+                     by = "ncaa_name",
+                     ignore_case = FALSE, 
+                     method = "jw", 
+                     max_dist = 99, 
+                     distance_col = "dist") %>%
+  group_by(ncaa_name.y) %>%
+  slice_min(order_by = dist, 
+            n = 1) %>%
+  rename(ncaa_name = ncaa_name.x,
+         TRACK_clean = ncaa_name.y) %>%
+  select(TRACK_clean,
+         ncaa_name,
+         espn_name, 
+         dist, everything()) %>%
+  arrange(TRACK_clean)
+
+
+# Clean relay team names
+df <- df %>%
+  mutate(TEAM_clean = str_replace(TEAM, " \\([[:alpha:]]\\)", ""))
+
+# With help of ncaahoopsR packages 
+df_colors <- read_csv("NCAA/data/ncaa_colors.csv")
+
+# Join the two data frames 
+df <- df %>% 
+  full_join(
+    df_colors %>%
+      select(TRACK_clean, ncaa_name),
+  by = c("TEAM_clean" = "TRACK_clean"))
+  
+# Take out redundant variable 
+df <- df %>%
+  select(-TEAM_clean)
+
+# Save as new rds
+saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
