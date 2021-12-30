@@ -152,8 +152,8 @@ df <- df %>%
 # Save as new rds
 saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
 
-# Remove the errant 3000 m results from 2010 Steeplechase
-df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds"))
+# Remove the errant 3000 m results from 2010 Steeplechase ----------------------
+df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
 
 df1 <- read_tsv(here::here("NCAA/data/tfrrs_2010_2021_data.tsv"),
                 col_types = cols(MARK = "c", 
