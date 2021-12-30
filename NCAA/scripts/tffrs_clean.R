@@ -68,9 +68,9 @@ saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds"))
 df <- readRDS(here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds"))
   
 df <- df %>%
-  mutate(EVENT = ifelse(EVENT == "3000 m", 
-                        "3000 Steeplechase", 
-                        EVENT)) %>%
+  # mutate(EVENT = ifelse(EVENT == "3000 m", 
+  #                       "3000 Steeplechase", 
+  #                       EVENT)) %>%
   mutate(EVENT = ifelse(EVENT == "3000 Steeplechase", 
                         "3,000 m Steeplechase", 
                         EVENT)) %>%
@@ -150,4 +150,24 @@ df <- df %>%
   select(-TEAM_clean)
 
 # Save as new rds
+saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
+
+# Remove the errant 3000 m results from 2010 Steeplechase
+df <- readRDS(url("https://tsoleary.github.io/track/NCAA/data/tfrrs_NCAA_2010_2021_final_data.rds"))
+
+df1 <- read_tsv(here::here("NCAA/data/tfrrs_2010_2021_data.tsv"),
+                col_types = cols(MARK = "c", 
+                                 MARK_METERS = "n", 
+                                 CONV = "c", 
+                                 POINTS = "n")) %>%
+  filter(EVENT == "3000 m") %>%
+  select(ATHLETE, MEET) %>%
+  mutate(remove = TRUE)
+
+df <- df %>%
+  full_join(df1) %>%
+  filter(is.na(remove)) %>%
+  select(-remove)
+
+# Save without 3000 m included
 saveRDS(df, here::here("NCAA/data/tfrrs_NCAA_2010_2021_final_data_team.rds"))
