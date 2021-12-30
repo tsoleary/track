@@ -1,5 +1,6 @@
 ---
-title: "NCAA top athletes in each event from 2010 to 2021"
+title: "Citius, Altius, Fortius in NCAA Track & Field"
+subtitle: "Are NCAA athletes getting faster, higher, & stronger?"
 author: "TS O'Leary"
 output:
   rmarkdown::html_document:
@@ -19,6 +20,7 @@ knitr::opts_chunk$set(echo = FALSE,
 require(tidyverse)
 require(shiny)
 require(broom)
+require(kableExtra)
 
 shinyThings::radioSwitchButtons_default_style(selected_background = "#faa555")
 
@@ -35,9 +37,37 @@ df_colors <- read_csv("https://raw.githubusercontent.com/tsoleary/track/main/NCA
 
 
 # Define sprint events for plotting
-sprints <- unique(df$EVENT)[c(1:3, 9:12)]
+sprints <- unique(df$EVENT)[c(1:3, 9:10, 12)]
 
-# Define functions ----
+
+# Define event order for good plotting
+event_order <- c("100m", 
+                 "100m Hurdles",
+                 "110m Hurdles",
+                 "4 x 100m Relay",
+                 "200m",
+                 "400m",
+                 "400m Hurdles",
+                 "4 x 400m Relay",
+                 "800m",
+                 "1500m",
+                 "3,000m Steeplechase",
+                 "5,000m",
+                 "10,000m", 
+                 "High Jump",
+                 "Pole Vault",
+                 "Long Jump",
+                 "Triple Jump",
+                 "Shot Put",
+                 "Discus",
+                 "Hammer",
+                 "Javelin",
+                 "Heptathlon",
+                 "Decathlon")
+
+
+# Define functions -------------------------------------------------------------
+
 # Function: violin_box_plot -----
 # Description: Creates a violin box plot
 # Inputs: input_description
@@ -69,21 +99,125 @@ violin_box_plot <- function(dat,
     theme_classic(base_size = 16)
 } ## End function -----
 
+
+# Function: lm_events_calc -----
+# Description: linear model on all events with scaled or unscaled options
+# Inputs: split tibble with EVENT, SEX, MARK_METERS, TIME_S, or POINTS columns
+#   n_top_ath - number of top athletes to include in the model
+#   scale - logical whether or not to scale before the linear model
+# Outputs: tidy lm model output
+
+# Required packages
+require(tidyverse)
+require(broom)
+
+# Example call
+# lm_10_scaled <- lm_events_calc(df_split, top_n_ath = 10, scaled = TRUE)
+
+
+lm_events_calc <- function(dat, top_n_ath, scaled = FALSE) {
+  
+  # To scale or not to scale
+  if (scaled) {
+  # Field events -- linear regression
+  df_field_lm <- df_split[[1]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(MARK_METERS = scale(MARK_METERS)) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(MARK_METERS ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "FIELD")
+ 
+  # Multi events -- linear regression
+  df_multi_lm <- df_split[[2]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(POINTS = scale(POINTS)) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(POINTS ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "MULTI")
+  
+  # Track events -- linear regression
+  df_track_lm <- df_split[[3]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(TIME_S = scale(TIME_S)) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(TIME_S ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "TRACK")
+  
+  } else {
+    
+  # Field events -- linear regression
+  df_field_lm <- df_split[[1]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(MARK_METERS ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "FIELD")
+ 
+  # Multi events -- linear regression
+  df_multi_lm <- df_split[[2]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(POINTS ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "MULTI")
+  
+  # Track events -- linear regression
+  df_track_lm <- df_split[[3]] %>%
+    filter(RANK <= top_n_ath) %>%
+    group_by(EVENT, SEX) %>%
+    mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
+    nest() %>%
+    mutate(
+      fit = map(data, ~ lm(TIME_S ~ YEAR_QUAL, data = .x)),
+      tidied = map(fit, tidy)
+    ) %>%
+    unnest(tidied) %>%
+    mutate(EVENT_TYPE = "TRACK")
+  }
+  
+  # Combine all results and add info about scale and n_top_ath
+  df_lm <- bind_rows(df_track_lm, df_field_lm, df_multi_lm) %>%
+    mutate(scale = scaled,
+           top_n_ath = as.factor(top_n_ath))
+  
+  # Return results
+  return(df_lm)
+  
+} ## End function -----
+
 ```
 
-<!-- # Questions to answer with this data -->
+# {.tabset}
 
-<!-- - Fastest versus very fast -- rich get richer... top 500 versus top 50, top 8 -->
-<!-- - UVM versus country -->
-<!-- - Which events are getting better or staying the same? -->
-<!-- - Are women or men improving faster? -->
-<!-- - Power conferences versus the country -->
-<!-- - Distribution of class year men versus women? over time and event -- are some events younger. are women or men younger? -->
-<!-- - which have lopsided year distribution, 5th year transfers versus improvements -->
-
-
-<!-- - team with the most 1st, top 8's 500's etc -->
-
+## Graphic
 
 ```{r shiny}
 shinyApp(
@@ -130,6 +264,14 @@ shinyApp(
           multiple = TRUE,
           selected = NULL
           ),
+      
+      # Viz trend?
+      shinyWidgets::prettySwitch(
+        inputId = "trend",
+        label = "Visualize trendline",
+        fill = TRUE, 
+        status = "primary"
+      ),
         
         ),
       
@@ -183,22 +325,6 @@ shinyApp(
 
       })
     
-    #     # Filter data based on inputs
-    # data_team_cols <- reactive({
-    #   
-    #   if (length(input$teams > 0)) {
-    #     temp <- df_colors %>%
-    #       filter(ncaa_name %in% input$teams) #%>%
-    #     # group_by(ncaa_name) %>%
-    #     # group_split()
-    #   } else {
-    #     temp <- NULL
-    #   }
-    #   
-    #   temp
-    # 
-    #   })
-    
     # Plot
     output$plot <- renderPlot({
       temp <- data() 
@@ -209,11 +335,31 @@ shinyApp(
             violin_box_plot(y = "TIME_S", 
                             y_lab = "Time (sec)")  + 
             scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
+          if (input$trend == TRUE) {
+            p <- p +
+              geom_smooth(data = temp, 
+                          aes(x = as.numeric(YEAR_QUAL), 
+                              y = TIME_S),
+                          method = lm,
+                          se = FALSE,
+                          formula = y ~ x,
+                          color = "grey50")
+          }
         } else {
           p <- temp %>%
             violin_box_plot(y = "TIME_S", 
                             y_lab = "Time (min:sec)") +
             scale_y_time(labels = function(l) strftime(l, '%M:%S'))
+          if (input$trend == TRUE) {
+            p <- p +
+              geom_smooth(data = temp, 
+                          aes(x = as.numeric(YEAR_QUAL), 
+                              y = TIME_S),
+                          method = lm,
+                          se = FALSE,
+                          formula = y ~ x,
+                          color = "grey50")
+          }
         }
 
       } else if (unique(temp$EVENT_TYPE) == "FIELD") {
@@ -221,11 +367,31 @@ shinyApp(
             violin_box_plot(y = "MARK_METERS", 
                             y_lab = "Mark (m)") + 
             scale_y_continuous(labels = scales::label_number(accuracy = 0.01))
+          if (input$trend == TRUE) {
+            p <- p +
+              geom_smooth(data = temp, 
+                          aes(x = as.numeric(YEAR_QUAL), 
+                              y = MARK_METERS),
+                          method = lm,
+                          se = FALSE,
+                          formula = y ~ x,
+                          color = "grey50")
+          }
         
       } else {
           p <- temp %>%
             violin_box_plot(y = "POINTS", 
                             y_lab = "Points")
+         if (input$trend == TRUE) {
+            p <- p +
+              geom_smooth(data = temp, 
+                          aes(x = as.numeric(YEAR_QUAL), 
+                              y = POINTS),
+                          method = lm,
+                          se = FALSE,
+                          formula = y ~ x,
+                          color = "grey50")
+          }
         
       }
       
@@ -314,113 +480,230 @@ shinyApp(
                                           unique(dat[[i]]$ncaa_name),
                                         "secondary_color"]))
           }
-        
+        }
       }
-        
-        
-      }
-      
-      p
-      
-
-      })
+    # Print the plot
+    p
+   })
   },
 
   # Set height for output of panel in html
-  options = list(height = 1000)
+  options = list(height = 450)
 )
 ```
 
+## About
+
+### Data & code
+
+All data was collected from [TFRRS](https://www.tfrrs.org/). Data represent the best performance of the top 500 NCAA DI athletes in each event at the time of qualifying for the First Round (Regionals) of the NCAA Outdoor Track & Field Championship -- in other words, these data do not include results from the NCAA Championship. All code used for this analysis is open-source and available on [this GitHub repository](https://github.com/tsoleary/track) -- please contact me if you are interested in collaborating.
+
+### Questions I have of these data
+
+- Which events are improving at the fastest rate?
+- Are the best athletes getting better at a faster rate than the rest of the top athletes?
+- Are women improving faster than men?
+- How does class year (year of eligibility) affect performance?
+  - To what degree is an athlete's eligibility year predictive of their rank?
+  - Is eligibility year more predictive for certain events?
+  - Do some events skew younger or older?
+  - Does the effect of eligibility year differ between men and women?
+- Which individual teams are improving in rank faster than others?
+- Are the Power Five Conferences increasing in rank faster than other conferences?
+
+
+# 
+
 ```{r}
-# ggplot() +
-#   geom_violin(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
-#               fill = "azure2", color = "grey40") +
-#   geom_boxplot(data = x[[i]], aes(x = YEAR_QUAL, y = TIME_M),
-#                fill = "azure2", color = "grey40", width = 0.2) +
-#   geom_smooth(data = x[[i]], aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
-#               method = lm, 
-#               se = FALSE,
-#               formula = y ~ x, 
-#               color = "grey50") +
-#     geom_smooth(data = df_uvm, aes(x = as.numeric(YEAR_QUAL), y = TIME_M),
-#               method = lm, 
-#               se = FALSE,
-#               formula = y ~ x, 
-#               color = "darkgreen") +
-#   geom_jitter(data = df_uvm, 
-#               width = 0.1,
-#              aes(x = YEAR_QUAL, y = TIME_M),
-#              alpha = 0.9,
-#              size = 2, 
-#              shape = 21, 
-#              stroke = 1,
-#              color = "darkgreen", 
-#              fill = "gold") +
-#   labs(title = paste0(unique(x[[i]]$SEX), "'s ", unique(x[[i]]$EVENT))) +
-#   theme_classic()
+# Scaled results
+lm_10_scaled <- lm_events_calc(df_split, top_n_ath = 10, scaled = TRUE)
+lm_100_scaled <- lm_events_calc(df_split, top_n_ath = 100, scaled = TRUE)
+lm_500_scaled <- lm_events_calc(df_split, top_n_ath = 500, scaled = TRUE)
+
+# Raw results
+lm_10_raw <- lm_events_calc(df_split, top_n_ath = 10, scaled = FALSE)
+lm_100_raw <- lm_events_calc(df_split, top_n_ath = 100, scaled = FALSE)
+lm_500_raw <- lm_events_calc(df_split, top_n_ath = 500, scaled = FALSE)
+
+# Combine results
+res <- bind_rows(lm_10_scaled, lm_100_scaled, lm_500_scaled,
+                 lm_10_raw, lm_10_raw, lm_10_raw)
 ```
 
-<!-- # Regression on the data -->
 
 ```{r, eval = FALSE}
-# Run linear regressions
-
-# Define top number of athletes
-top_n_ath <- 8
-
-# Field events -- linear regression
-df_field_lm <- df_split[[1]] %>%
-  group_by(EVENT, SEX, YEAR_QUAL) %>%
-  slice_min(order_by = RANK,
-            n = top_n_ath) %>%
-  ungroup(YEAR_QUAL) %>%
-  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
-  nest() %>%
-  mutate(
-    fit = map(data, ~ lm(MARK_METERS ~ YEAR_QUAL, data = .x)),
-    tidied = map(fit, tidy),
-    glanced = map(fit, glance)
-  ) %>%
-  unnest(tidied)
-
-# Multi events -- linear regression
-df_multi_lm <- df_split[[2]] %>%
-  group_by(EVENT, SEX, YEAR_QUAL) %>%
-  slice_min(order_by = RANK,
-            n = top_n_ath) %>%
-  ungroup(YEAR_QUAL) %>%
-  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
-  nest() %>%
-  mutate(
-    fit = map(data, ~ lm(POINTS ~ YEAR_QUAL, data = .x)),
-    tidied = map(fit, tidy),
-    glanced = map(fit, glance)
-  ) %>%
-  unnest(tidied)
-
-# Track events -- linear regression
-df_track_lm <- df_split[[3]] %>%
-  group_by(EVENT, SEX, YEAR_QUAL) %>%
-  slice_min(order_by = RANK,
-            n = top_n_ath) %>%
-  ungroup(YEAR_QUAL) %>%
-  mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
-  nest() %>%
-  mutate(
-    fit = map(data, ~ lm(TIME_S ~ YEAR_QUAL, data = .x)),
-    tidied = map(fit, tidy),
-    glanced = map(fit, glance)
-  ) %>%
-  unnest(tidied)
-
-# Bind all back to a single data frame
-df_lm <- bind_rows(df_track_lm, df_field_lm, df_multi_lm)
-  
-x <- df_lm %>% 
+# RESULTS SUMMARIES ----
+x <- res %>% 
   filter(term == "YEAR_QUAL") %>% 
-  filter(p.value < 0.05/84)
+  filter(p.value < 0.05/252) %>%
+  arrange(p.value)
 
-x
+x %>%
+  select(EVENT, SEX, scale, top_n_ath, estimate, p.value) %>%
+  mutate(p.value = as.character(signif(p.value, 2))) %>%
+  kable() %>%
+  kable_styling("striped") %>% 
+  scroll_box(width = "100%", height = "250px") 
 
+x %>%
+  group_by(SEX, top_n_ath) %>%
+  count() %>%
+  pivot_wider(names_from = top_n_ath, values_from = n) %>%
+  kable() %>%
+  kable_styling("striped") %>%
+  add_header_above(c(" ", "Top # Athletes" = 3))
+
+x %>%
+  group_by(EVENT_TYPE, top_n_ath) %>%
+  count() %>%
+  pivot_wider(names_from = top_n_ath, values_from = n) %>%
+  kable() %>%
+  kable_styling("striped") %>%
+  add_header_above(c(" ", "Top # Athletes" = 3))
+
+x %>%
+  group_by(EVENT_TYPE, SEX) %>%
+  count() %>%
+  pivot_wider(names_from = SEX, values_from = n) %>%
+  kable() %>%
+  kable_styling("striped")
+
+```
+
+# Average change per year
+
+## {.tabset}
+
+### Women
+
+```{r, fig.height = 7}
+res %>%
+  filter(SEX == "Women" & 
+           scale == TRUE & 
+           term == "YEAR_QUAL" &
+           p.value < 0.05/252) %>%
+  mutate(EVENT = factor(EVENT, levels = rev(event_order))) %>%
+  ggplot(aes(x = EVENT, 
+             y = estimate,
+             ymin = 0,
+             ymax = estimate,
+             color = top_n_ath)) + 
+  geom_point(position = position_dodge(width = 0.5),
+             stat = 'identity', 
+             size = 2) +
+  geom_linerange(position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "Top #\nAthletes",
+                     values = c("grey10", "grey30", "grey60")) +
+  #scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+  labs(y = "Standard change in mean performance per year",
+       x = element_blank()) +
+  coord_flip() +
+  theme_minimal() 
+```
+
+### Men
+
+```{r, fig.height = 7}
+res %>%
+  filter(SEX == "Men" & 
+           scale == TRUE & 
+           term == "YEAR_QUAL" &
+           p.value < 0.05/252) %>%
+  mutate(EVENT = factor(EVENT, levels = rev(event_order))) %>%
+  ggplot(aes(x = EVENT, 
+             y = estimate,
+             ymin = 0,
+             ymax = estimate,
+             color = top_n_ath)) + 
+  geom_point(position = position_dodge(width = 0.5),
+             stat = 'identity', 
+             size = 2) +
+  geom_linerange(position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "Top #\nAthletes",
+                     values = c("grey10", "grey30", "grey60")) +
+  labs(y = "Standard change in mean performance per year",
+       x = element_blank()) +
+  coord_flip() +
+  theme_minimal()
+```
+
+## Men vs. Women  {.tabset}
+
+### Top 10
+
+```{r, fig.height = 7}
+res %>%
+  filter(scale == TRUE &
+           top_n_ath == 10 &
+           term == "YEAR_QUAL" &
+           p.value < 0.05/252) %>%
+  mutate(EVENT = factor(EVENT, levels = rev(event_order))) %>%
+  ggplot(aes(x = EVENT, 
+             y = estimate,
+             ymin = 0,
+             ymax = estimate,
+             color = SEX)) + 
+  geom_point(position = position_dodge(width = 0.5),
+             stat = 'identity', 
+             size = 2) +
+  geom_linerange(position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "Sex",
+                     values = c("darkseagreen3", "mediumpurple1")) +
+  labs(y = "Standard change in mean performance per year",
+       x = element_blank()) +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Top 100
+
+```{r, fig.height = 7}
+res %>%
+  filter(scale == TRUE &
+           top_n_ath == 100 &
+           term == "YEAR_QUAL" &
+           p.value < 0.05/252) %>%
+  mutate(EVENT = factor(EVENT, levels = rev(event_order))) %>%
+  ggplot(aes(x = EVENT, 
+             y = estimate,
+             ymin = 0,
+             ymax = estimate,
+             color = SEX)) + 
+  geom_point(position = position_dodge(width = 0.5),
+             stat = 'identity', 
+             size = 2) +
+  geom_linerange(position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "Sex",
+                     values = c("darkseagreen3", "mediumpurple1")) +
+  labs(y = "Standard change in mean performance per year",
+       x = element_blank()) +
+  coord_flip() +
+  theme_minimal()
+```
+
+### Top 500
+
+```{r, fig.height = 7}
+res %>%
+  filter(scale == TRUE &
+           top_n_ath == 500 &
+           term == "YEAR_QUAL" &
+           p.value < 0.05/252) %>%
+  mutate(EVENT = factor(EVENT, levels = rev(event_order))) %>%
+  ggplot(aes(x = EVENT, 
+             y = estimate,
+             ymin = 0,
+             ymax = estimate,
+             color = SEX)) + 
+  geom_point(position = position_dodge(width = 0.5),
+             stat = 'identity', 
+             size = 2) +
+  geom_linerange(position = position_dodge(width = 0.5)) +
+  scale_color_manual(name = "Sex",
+                     values = c("darkseagreen3", "mediumpurple1")) +
+  labs(y = "Standard change in mean performance per year",
+       x = element_blank()) +
+  coord_flip() +
+  theme_minimal()
 ```
 
