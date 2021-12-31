@@ -121,9 +121,9 @@ lm_events_calc <- function(dat, top_n_ath, scaled = FALSE) {
   if (scaled) {
   # Field events -- linear regression
   df_field_lm <- df_split[[1]] %>%
-    filter(RANK <= top_n_ath) %>%
     group_by(EVENT, SEX) %>%
     mutate(MARK_METERS = scale(MARK_METERS)) %>%
+    filter(RANK <= top_n_ath) %>%
     mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
     nest() %>%
     mutate(
@@ -135,9 +135,9 @@ lm_events_calc <- function(dat, top_n_ath, scaled = FALSE) {
  
   # Multi events -- linear regression
   df_multi_lm <- df_split[[2]] %>%
-    filter(RANK <= top_n_ath) %>%
     group_by(EVENT, SEX) %>%
     mutate(POINTS = scale(POINTS)) %>%
+    filter(RANK <= top_n_ath) %>%
     mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
     nest() %>%
     mutate(
@@ -149,9 +149,9 @@ lm_events_calc <- function(dat, top_n_ath, scaled = FALSE) {
   
   # Track events -- linear regression
   df_track_lm <- df_split[[3]] %>%
-    filter(RANK <= top_n_ath) %>%
     group_by(EVENT, SEX) %>%
     mutate(TIME_S = scale(TIME_S)) %>%
+    filter(RANK <= top_n_ath) %>%
     mutate(YEAR_QUAL = as.numeric(as.character(YEAR_QUAL))) %>%
     nest() %>%
     mutate(
